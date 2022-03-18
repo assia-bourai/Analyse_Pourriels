@@ -1,0 +1,549 @@
+---
+title: 'Partie A'
+output: html_notebook
+---
+
+
+
+
+
+
+
+
+M2 AMSD
+
+- BOURAÏ Assia 
+
+
+
+
+
+
+
+
+
+
+# Lecture des données 
+
+
+```{r}
+spam <- read.table("https://www.math.univ-toulouse.fr/~besse/Wikistat/data/spam.dat", header=TRUE)
+spam[, 1] <- as.factor(spam[, 1])
+
+summary(spam)
+```
+
+
+
+```{r}
+
+dim(spam)
+print(str(spam))
+```
+
+```{r}
+par(mfrow = c(1, 2))
+options(repr.plot.width = 5, repr.plot.height = 3)
+boxplot(spam[, "all"]); hist(spam[, "all"], main = "")
+```
+
+
+```{r}
+par(mfrow = c(1,2))
+boxplot(spam[, "CapLtot"]); hist(spam[, "CapLtot"], main = "", xlab = "")
+
+```
+
+
+```{r}
+boxplot(spam[, 2:55])
+print(mean(spam[, -1] == 0))
+```
+
+# Réponse 1 
+matrice sparse ie contient beacoup de 0 
+non symmétrique.
+
+
+```{r}
+boxplot(spam[, 56:58])
+```
+
+
+```{r}
+par(mfrow = c(1,2))
+varName <- names(spam)[58]
+boxplot(log(1 + spam[, varName]), main = varName)
+hist(log(1 + spam[, varName]), main = "", xlab = "")
+```
+
+______________________
+# Réponse 2
+Justification du choix de la standardisation proposée:
+Les variables ont des moyennes et des valeurs max très disparates
+
+Transformation logarithmique 
+Lorsque nos données continues d'origine ne suivent pas la courbe en cloche, nous pouvons effectuer une transformation logarithmique de ces données pour les rendre aussi "normales" que possible afin que les résultats de l'analyse statistique de ces données soient plus valables. En d'autres termes, la transformation logarithmique réduit ou supprime l'asymétrie de nos données d'origine. La mise en garde importante ici est que les données d'origine doivent suivre ou suivre approximativement une distribution log-normale. Sinon, la transformation logarithmique ne fonctionnera pas.
+
+Dans notre cas, Une transformation logarithmique est utile pour que certaines variables aux valeurs très grandes (CapLM, CapLsup,...)
+ne deviennent pas trop prépondérantes lors de l'ACP et "masquent" les autres variables.
+
+___________________________
+
+```{r}
+# Appliquer log sur toutes les variables sauf spam
+Lspam <- data.frame("spam" = spam[, 1], log(1 + spam[, -1]))
+```
+
+
+------------------------------------------------------------------------------
+
+                                3 APPROCHE QUANTITATIVE 
+
+                                3.1 CALCUL DE L'ACP
+
+-----------------------------------------------------------------------------
+
+```{r}
+library(FactoMineR)
+res.pca=PCA(spam,scale.unit = FALSE,quali.sup=1)
+res.pca1=PCA(spam,scale.unit = TRUE,quali.sup=1)
+
+```
+```{r}
+res.pca=PCA(Lspam,scale.unit = FALSE, quali.sup=1)
+
+```
+
+______________________________
+
+
+La représentation obtenue ne nous permet pas vraiment d'identifier les deux classes spam et non spam.
+En observant le cercle de correlation, on voit que les variables Cap et CapLsup prennent des valeurs beaucoup trop grandes par rapport au reste des variables => il faut les mettre à la même échelle.
+La matrice diagonalisée est celle ayant subit une transformation logarithmique. 
+Pour remedier au problème énoncé précédemment, nous pouvons utliser "scale.unit = TRUE" lors de l'ACP afin de mettre toutes les valeurs des variables à la même échelle.  
+
+______________________________________
+
+
+```{r}
+res.pca=PCA(Lspam,scale.unit = TRUE,quali.sup=1)
+summary(res.pca)
+```
+
+
+__________________________________________________________
+Dans une ACP normée, la somme des valeurs propres étant égale au nombre de variables, leur moyennes vaut 1.
+On considère par conséquent que la dimension à prendre en considération est interessante si sa valeur propre est superieure à 1 (selon la règle de Kaiser).
+Si on applique cette règle, d'après les résultats des valeurs propres obtenues, on doit prendre les 17 premières dimensions pour effectuer notre analyse. 
+Ce choix n'est pas du tout raisonable dans notre cas.
+__________________________________________________________
+
+
+```{r}
+par(mfrow = c(1,2))
+options(repr.plot.width = 8, repr.plot.height = 3)
+barplot(res.pca$eig[, 1], main = "Eigenvalues", names.arg = 1:nrow(res.pca$eig))
+boxplot(res.pca$ind$coord)
+```
+
+________________________________________________________________
+
+L'histogramme des valeurs propres nous montre bien qu'il est plus judicieux de prendre uniquement les deux premières dimensions pour faire notre analyse.
+Elles expliquent le plus de variance. 
+
+________________________________________________________________
+
+
+
+```{r}
+
+plot(res.pca,choix = "var", cex = 0.7)
+
+```
+
+_________________________________________________________________________
+
+En analysant le cercle de corrélation ci dessus qui est assez difficile à lire, on remarque que:
+
+
+- On obtient un meilleur pourcentage d'intertie expliquée par les 2 premiers axes avec le log (Lspam).
+
+- les variables direct, technology, telnet et X415 sont fortement corrélés positivement et mieux représentées étant donné qu'elles proche du cercle
+- les variables CapLsup, CapLtot et CapLM sont également fortement corrélés positivement et mieux représentées étant donné qu'elles proche du cercle ( logique vu qu'elle représente toutes des valeurs en relation avec les capitales)
+- les variables george et edu sont aussi fortement corrélées positivement mais indiquent des variables dont les propriétés ne sont pas mises en
+évidence par le cercle de corrélation (car proche de l'origine);
+- il y'a une corrélation négative entre george, edu et CapLsup,CapLtot et CapLM
+
+On pourrait déduire que : 
+   Premier axe : informations spécifiques  au poste de George => plutôt pas un pourriel
+   Deuxième axe : Variables majuscules, références à l'argent => indique plutôt un pourriel
+
+____________________________________________________________________________
+
+```{r}
+plot(res.pca, choix = "ind", habillage = 1, cex = 0.1)
+```
+
+__________________________________________________________________________
+
+ Le graphique ci dessus représente le graphe des individus; les points rouges identifient les spams.
+ On observe que les deux classes ne sont pas très bien séparées, il y'a un chevauchement des deux classes au niveau de l'origine du plan.
+ Il n'est donc pas évident de discriminer linéairement les deux groupes.
+ 
+ ________________________________________________________________________
+ 
+ 
+------------------------------------------------------------------------------
+
+                                APPROCHE QUANTITATIVE 
+
+                                3.2 Classification des variables 
+
+-----------------------------------------------------------------------------
+
+ 
+```{r}
+
+dist.var<-as.dist(1-cor(Lspam[2:58])**2)
+clas.var<-hclust(dist.var,method="ward.D")
+plot(clas.var)
+plot(clas.var$height[56:40])
+```
+ 
+____________________________________________________________________________________________________________
+La distance utilisée: distance euclidienne 
+La méthode utilisée: classification hiérarchique avec critère d'aggrégation Ward 
+Le nombre de classes est identifié en utilisant les barres du dendrogramme obtenu. Ici on peut fixer k = 3 car c'est le point à partir duquel la pente devient plus ou moins constante.  
+D'après le dendrogramme, les deux classes de variables les plus explicites pour caractériser les messages sont la technologie/ protocol réseau  utilisé dans l'envoi du message (les variables les plus à gauche), les variables majuscules (CapLM,CapLSup, CapLtot) et le contenu du message .
+
+C'est assez cohérent avec le cercle de corrélation qu'on obtenait dans l'ACP
+
+____________________________________________________________________________________________________________
+
+
+----------------------------------------------------------------
+Représentation par positionnement multidimensionnel (MDS)
+-------------------------------------------------------------------
+
+```{r}
+
+rS = cor(Lspam[2:58])
+dS2=sqrt(1-rS**2)
+dN=dimnames(Lspam[2:58])[[2]]
+mdspam= cmdscale(dS2, k=2)
+plot(mdspam, type="n", xlab="", ylab="",main="")
+text(mdspam,dN)
+abline(v=0,h=0)
+
+```
+__________________________________________________________________________________________________
+# Représentation de 4 classes de variables dans les coordonnées du MDS
+MDS: méthode factorielle de réduction de la dimension. 
+c'est une ACP sur une matrice de distances, d'où le résultat semblable à l'ACP vu précédemment 
+
+__________________________________________________________________________________________________
+
+```{r}
+classes <- cutree(clas.var,k=4)
+sort(classes)
+names(classes[classes==2]) #variables de la classe 2
+coul = classes
+plot(mdspam, type="n", xlab="Dimension 1",
+ylab="Dimension 2", main="CAH euclid")
+text(mdspam,dN,col=coul)
+
+```
+________________________________________________________________________________________________________________________________
+
+La classification des variables en 4 classes nous montre bien que l'interprétation donnée à l'issue de l'ACP est cohérente. 
+les variables fortement corrélées (dans l'ACP) appartiennent à la même classe (dans MDS)
+
+_________________________________________________________________________________________________________________________________
+
+
+------------------------------------------------------------------------------
+
+                                4 APPROCHE QUALITATIVE 
+
+                                4.1 RECODAGE 
+
+-----------------------------------------------------------------------------
+
+
+importation des données recodées 
+
+```{r}
+spam.quali <- read.table("https://www.math.univ-toulouse.fr/~besse/Wikistat/data/spamq.dat")
+summary(spam.quali)
+```
+
+
+------------------------------------------------------------------------------
+
+                                APPROCHE QUALITATIVE 
+
+                                4.2 AFCM 
+
+-----------------------------------------------------------------------------
+
+
+```{r}
+afc=MCA(spam.quali,quali.sup=c(32,34,58))
+plot.MCA(afc,invisible=c("ind"),col.var="blue")
+```
+__________________________________________________________________
+quali.sup est un vecteur des index des variables qualitatives supplémentaires 
+
+____________________________________________________________________
+
+
+
+```{r}
+options(repr.plot.width = 6, repr.plot.height = 6)
+plot.MCA(afc, invisible = c("ind"), col.var = "blue", cex = 1)
+plot.MCA(afc, invisible = c("ind"), col.var = "blue", xlim = c(-1, 2), ylim = c(-1, 1), cex = 1)
+```
+________________________________________________________________________
+
+La dispersion des messages est un peu plus claire qu'avec l'ACP. 
+On voit bien que les spams sont classés en bas à droite. 
+___________________________________________________________________________
+
+
+------------------------------------------------------------------------------
+
+                                APPROCHE QUALITATIVE 
+
+                                4.2 CLASSIFICATION DES MODALITES 
+
+-----------------------------------------------------------------------------
+
+
+
+```{r}
+dist.mod=dist(afc$var$coord, method="euclidean")
+hclusmod=hclust(dist.mod,method="ward")
+plot(hclusmod)
+plot(hclusmod$height[112:100])
+
+```
+
+___________________________________________________________________________________________________________________
+
+on fixe k = 4 pour le nombre de clusters, car c'est à partir de cette valeur que la pente est relativement stable.
+
+___________________________________________________________________________________________________________________
+
+```{r}
+hclasmod = cutree(hclusmod,k=4)
+
+#kmeans
+
+clas.mod=kmeans(afc$var$coord, 4)
+kclasmod=clas.mod$cluster
+# comparaison des classes entre CAH et k-means
+table(hclasmod,kclasmod)
+
+
+```
+
+__________________________________________________________________________________________________________________
+
+en comparant les résultats obtenus avec cah et kmeans, on déduit que les classes obtenues sont presque similaires.
+les classes sont stables.
+___________________________________________________________________________________________________________________
+
+```{r}
+plot.MCA(afc,invisible=c("ind"),
+col.var=as.integer(clas.mod$cluster))
+plot(afc$ind$coord,type="p",pch=".",cex=2,
+col=as.integer(spam.quali[,58]))
+```
+
+
+```{r}
+# modalités des variables par classe 
+
+names(hclasmod)[hclasmod == 1]
+names(hclasmod)[hclasmod == 2]
+names(hclasmod)[hclasmod == 3]
+names(hclasmod)[hclasmod == 4]
+```
+
+______________________________________________________________________________________
+
+
+les classes 1, 3 et 4 représentent bien des messages reçus mais la classe 2 n'a pas vraiment de sens au niveau clustering (elle rassemble des termes qui n'apparaissent pas dans les messages) .
+ça serait plus efficace de ne pas les prendre en considération lors de la classification ( prendre uniquement les termes présents dans les messages).
+
+Les termes de la 1ere classe caractérisent principalemet les spams (money, receive, credit, free ...etc)
+
+______________________________________________________________________________________
+
+
+
+
+------------------------------------------------------------------------------
+
+                                APPROCHE PAR NMF 
+
+                                5.1 FACTORISATION  NON NEGATIVE 
+
+-----------------------------------------------------------------------------
+```{r}
+if (!requireNamespace("BiocManager", quietly = TRUE))
+  install.packages("BiocManager")
+if (!requireNamespace("Biobase", quietly = TRUE))
+  BiocManager::install("Biobase")
+install.packages("NMF")
+```
+
+ 
+```{r}
+library(NMF)
+nmfAlgorithm()
+nmfAlgorithm("brunet")  #KL div
+nmfAlgorithm("lee")     # Euclidean dist
+nmfAlgorithm("snmf/l")  # dist personnalisée
+nmfAlgorithm("snmf/r")  # dist personnalisée
+```
+```{r}
+creux=as.matrix(spam[,2:58])
+classe=spam[,58]
+creux=cbind(log(1+creux[,1:54]),log(creux[,55:57])/2)
+boxplot(creux)
+# souci pour la suite :
+sum(apply(creux,1,sum)==0)
+# 3 messages sont devenus tout à 0
+# suppression
+ident=apply(creux,1,sum)!=0
+creux=creux[ident,]
+classe=classe[ident]
+```
+
+```{r}
+res.multi.method=nmf(creux, 5,nrun=10,
+list("brunet","lee","snmf/l","snmf/r"),
+seed = 111, .options ="t")
+compare(res.multi.method)
+consensusmap(res.multi.method,hclustfun="ward")
+```
+________________________________________________________________________________
+
+snmf/l donne la factorisation la plus "propre"avec une meilleure stabilité des classes (silhouette consensus), residuals faibles
+
+________________________________________________________________________________
+
+
+
+
+
+
+
+
+
+```{r}
+estim.r=nmf(creux,2:7,method="snmf/l",
+nrun=10,seed=111)
+plot(estim.r)
+consensusmap(estim.r)
+
+```
+_______________________________________________________________________________
+Le Rang 5 représente le meilleur rang (coude pour dispersion, cophenetic, silhouette)
+_________________________________________________________________________________
+
+
+```{r}
+nmf.spam=nmf(creux,5,method="snmf/l",nrun=30, seed=111)
+```
+
+```{r}
+summary(nmf.spam)
+s=featureScore(nmf.spam)
+summary(s)
+s=extractFeatures(nmf.spam)
+str(s)
+# les matrices de facteurs
+w=basis(nmf.spam)
+h=coef(nmf.spam)
+```
+```{r}
+basismap(nmf.spam,annRow=classe,hclustfun="ward")
+coefmap(nmf.spam,hclustfun="ward")
+```
+Classification des variables
+
+```{r}
+dist.mod=dist(t(h), method="euclidean")
+hclusmod.h=hclust(dist.mod,method="ward")
+plot(hclusmod)
+plot(hclusmod$height[56:46])
+```
+```{r}
+mdspam= cmdscale(dist.mod, k=2)
+dN=dimnames(h)[[2]]
+plot(mdspam, type="n", xlab="", ylab="",main="")
+text(mdspam,dN)
+abline(v=0,h=0)
+```
+```{r}
+dist.mod=dist(scale(t(h)), method="eucl")
+mdspam= cmdscale(dist.mod, k=2)
+hclusmod.h=hclust(dist.mod,method="ward")
+plot(hclusmod.h)
+plot(hclusmod.h$height[56:46])
+hclasmod = cutree(hclusmod.h,k=4)
+plot(mdspam, type="n", xlab="", ylab="",main="")
+text(mdspam,dN,col=hclasmod)
+abline(v=0,h=0)
+```
+```{r}
+# classificaiton des messages à partir de w
+dist.mod=dist(scale(w), method="euclidean")
+hclusmod.w=hclust(dist.mod,method="ward")
+plot(hclusmod.w)
+# intégration des deux classifications
+aheatmap(creux,Rowv=hclusmod.w,
+Colv=hclusmod.h,annRow=classe,
+annCol=as.factor(hclasmod))
+```
+
+
+
+--------------------------------------------------------------------------------
+
+
+                      Modèles de mélanges 
+                      
+                
+--------------------------------------------------------------------------------
+
+
+Mclust 
+
+```{r}
+library(mclust)
+
+
+```
+```{r}
+res=Mclust(Lspam)
+
+```
+
+
+```{r}
+pred.mclust = as.vector(res$class)
+
+plot(res.pca$ind$coord,col=pred.mclust, main = "mclust")
+
+```
+
+
+```{r}
+summary(res)
+```
+
+
